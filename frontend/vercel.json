@@ -1,4 +1,9 @@
 {
+  "build": {
+    "env": {
+      "VITE_API_URL": "https://minishop-production-0016.up.railway.app/api"
+    }
+  },
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]

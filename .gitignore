@@ -1,0 +1,11 @@
+.vercel
+
+# Ignore actual env files with secrets, but keep examples
+.env
+.env.local
+.env.*.local
+backend/.env
+
+# Keep .env.example so contributors know what vars are needed
+!.env.example
+!frontend/.env.example
