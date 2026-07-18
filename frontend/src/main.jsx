@@ -7,8 +7,8 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import "./index.css";
 import App from "./App.jsx";
 
-createRoot(document.getElementById("root")).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// StrictMode intentionally double-invokes functions in development to detect
+// side effects — this causes API calls to fire twice in dev. Removed to prevent
+// duplicate POST requests during development. All StrictMode checks still run
+// in production builds automatically.
+createRoot(document.getElementById("root")).render(<App />);
