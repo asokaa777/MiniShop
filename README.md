@@ -1,7 +1,5 @@
 # MiniShop — Product Catalog & Cart
 
-Full Stack Developer technical test project.
-
 Full Stack Developer technical test project. A simple e-commerce app with product catalog, shopping cart, checkout, and admin panel.
 
 ---
@@ -169,3 +167,7 @@ Running `php artisan migrate:fresh --seed` inserts 10 products across categories
 - Product CRUD
 - Order Management
 - Order Detail View
+
+git add README.md
+git commit -m "Fix README description"
+git push
