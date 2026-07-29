@@ -8,19 +8,15 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request)
     {
-        $query = Product::query();
+        $query = Product::withCount('reviews')
+            ->withAvg('reviews', 'rating');
 
-        // Search berdasarkan nama
         if ($request->filled('search')) {
             $query->where('name', 'like', '%' . $request->search . '%');
         }
 
-        // Filter kategori
         if ($request->filled('category')) {
             $query->where('category', $request->category);
         }
@@ -30,71 +26,59 @@ class ProductController extends Controller
         );
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
+            'name'        => 'required|string|max:255',
+            'price'       => 'required|numeric|min:0',
             'description' => 'required',
-            'image' => 'nullable|string',
-            'category' => 'required|string',
-            'stock' => 'required|integer|min:0',
+            'image'       => 'nullable|string',
+            'category'    => 'required|string',
+            'stock'       => 'required|integer|min:0',
         ]);
 
         $product = Product::create($validated);
 
         return response()->json([
             'message' => 'Product created successfully',
-            'data' => $product
+            'data'    => $product,
         ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(string $id)
     {
-        $product = Product::findOrFail($id);
+        $product = Product::withCount('reviews')
+            ->withAvg('reviews', 'rating')
+            ->findOrFail($id);
 
         return response()->json($product);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, string $id)
     {
         $product = Product::findOrFail($id);
 
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'price' => 'required|numeric|min:0',
+            'name'        => 'required|string|max:255',
+            'price'       => 'required|numeric|min:0',
             'description' => 'required',
-            'image' => 'nullable|string',
-            'category' => 'required|string',
-            'stock' => 'required|integer|min:0',
+            'image'       => 'nullable|string',
+            'category'    => 'required|string',
+            'stock'       => 'required|integer|min:0',
         ]);
 
         $product->update($validated);
 
         return response()->json([
             'message' => 'Product updated successfully',
-            'data' => $product
+            'data'    => $product,
         ]);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(string $id)
     {
         Product::findOrFail($id)->delete();
 
-        return response()->json([
-            'message' => 'Product deleted successfully'
-        ]);
+        return response()->json(['message' => 'Product deleted successfully']);
     }
 }
