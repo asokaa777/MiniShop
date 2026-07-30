@@ -6,24 +6,42 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
+    /** Admin: semua order */
     public function index()
     {
-        $orders = Order::with('items.product')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        return response()->json($orders);
+        return response()->json(
+            Order::with(['items.product', 'items.variant', 'user:id,name,email'])
+                ->latest()
+                ->get()
+        );
     }
 
-    public function show($id)
+    /** Customer: hanya order milik sendiri */
+    public function myOrders(Request $request)
     {
-        $order = Order::with('items.product')->findOrFail($id);
+        return response()->json(
+            $request->user()
+                ->orders()
+                ->with(['items.product', 'items.variant'])
+                ->latest()
+                ->get()
+        );
+    }
+
+    public function show(Request $request, int $id)
+    {
+        $order = Order::with(['items.product', 'items.variant'])->findOrFail($id);
+
+        if (!$request->user()->isAdmin() && $order->user_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
 
         return response()->json($order);
     }
@@ -31,55 +49,80 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'items'          => 'required|array|min:1',
-            'items.*.id'     => 'required|exists:products,id',
-            'items.*.qty'    => 'required|integer|min:1',
+            'items'              => 'required|array|min:1',
+            'items.*.id'         => 'required|exists:products,id',
+            'items.*.variant_id' => 'nullable|exists:product_variants,id',
+            'items.*.qty'        => 'required|integer|min:1',
         ]);
 
         $order = DB::transaction(function () use ($request) {
             $total = 0;
+            $itemsData = [];
 
-            // First pass: validate stock for all items
             foreach ($request->items as $item) {
                 $product = Product::lockForUpdate()->findOrFail($item['id']);
+                $variant = null;
 
-                if ($product->stock < $item['qty']) {
-                    throw ValidationException::withMessages([
-                        'stock' => "Stock produk \"{$product->name}\" tidak cukup. Tersisa {$product->stock}.",
-                    ]);
+                if (!empty($item['variant_id'])) {
+                    $variant = ProductVariant::lockForUpdate()->where('product_id', $product->id)->findOrFail($item['variant_id']);
+
+                    if ($variant->stock < $item['qty']) {
+                        throw ValidationException::withMessages([
+                            'stock' => "Stok varian \"{$variant->name}\" dari \"{$product->name}\" tidak cukup. Tersisa {$variant->stock}.",
+                        ]);
+                    }
+
+                    $itemPrice = $variant->price ?? $product->price;
+                } else {
+                    if ($product->stock < $item['qty']) {
+                        throw ValidationException::withMessages([
+                            'stock' => "Stok \"{$product->name}\" tidak cukup. Tersisa {$product->stock}.",
+                        ]);
+                    }
+
+                    $itemPrice = $product->price;
                 }
 
-                $total += $product->price * $item['qty'];
+                $subtotal = $itemPrice * $item['qty'];
+                $total += $subtotal;
+
+                $itemsData[] = [
+                    'product'      => $product,
+                    'variant'      => $variant,
+                    'qty'          => $item['qty'],
+                    'price'        => $itemPrice,
+                    'subtotal'     => $subtotal,
+                ];
             }
 
-            // Create order record
             $order = Order::create([
+                'user_id'      => $request->user()->id,
                 'order_number' => 'ORD-' . strtoupper(substr(uniqid(), -6)),
                 'total_price'  => $total,
                 'status'       => 'pending',
             ]);
 
-            // Second pass: create items and decrement stock
-            foreach ($request->items as $item) {
-                $product = Product::findOrFail($item['id']);
-
+            foreach ($itemsData as $data) {
                 OrderItem::create([
-                    'order_id'   => $order->id,
-                    'product_id' => $product->id,
-                    'quantity'   => $item['qty'],
-                    'price'      => $product->price,
-                    'subtotal'   => $product->price * $item['qty'],
+                    'order_id'     => $order->id,
+                    'product_id'   => $data['product']->id,
+                    'variant_id'   => $data['variant']?->id,
+                    'variant_name' => $data['variant']?->name,
+                    'quantity'     => $data['qty'],
+                    'price'        => $data['price'],
+                    'subtotal'     => $data['subtotal'],
                 ]);
 
-                $product->decrement('stock', $item['qty']);
+                if ($data['variant']) {
+                    $data['variant']->decrement('stock', $data['qty']);
+                } else {
+                    $data['product']->decrement('stock', $data['qty']);
+                }
             }
 
-            return $order->load('items.product');
+            return $order->load('items.product', 'items.variant');
         });
 
-        return response()->json([
-            'message' => 'Order berhasil',
-            'order'   => $order,
-        ], 201);
+        return response()->json(['message' => 'Order berhasil', 'order' => $order], 201);
     }
 }
