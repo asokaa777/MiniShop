@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 import { GoogleSignInButton } from '../components/GoogleSignInButton';
+import { FacebookSignInButton } from '../components/FacebookSignInButton';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -105,8 +106,9 @@ export default function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          {/* Google Sign In */}
+          {/* Social login buttons */}
           <GoogleSignInButton />
+          <FacebookSignInButton />
 
           {/* Register link */}
           <View style={styles.registerRow}>
