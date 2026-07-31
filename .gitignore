@@ -1,4 +1,5 @@
 .vercel
+.expo/
 
 # Ignore actual env files with secrets, but keep examples
 .env
