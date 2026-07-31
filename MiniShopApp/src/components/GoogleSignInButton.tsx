@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   TouchableOpacity,
   Text,
@@ -12,50 +12,45 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../constants/colors';
 import { useAuth } from '../context/AuthContext';
 
-try {
-  WebBrowser.maybeCompleteAuthSession();
-} catch {
-  // handled safely
-}
+// Required so the browser popup closes and returns to the app on Android
+WebBrowser.maybeCompleteAuthSession();
 
 export function GoogleSignInButton() {
   const router = useRouter();
   const { socialLogin } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  let request: any = null;
-  let response: any = null;
-  let promptAsync: any = null;
-
-  try {
-    if (typeof Google?.useAuthRequest === 'function') {
-      const authRes = Google.useAuthRequest({
-        androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 'dummy_android_id',
-        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 'dummy_ios_id',
-        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 'dummy_web_id',
-      });
-      request = authRes[0];
-      response = authRes[1];
-      promptAsync = authRes[2];
-    }
-  } catch {
-    // fallback if Google auth session hook fails
-  }
+  // Hook must be at top level — no try/catch, no conditional
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    // Only Web Client ID is needed when testing with Expo Go
+    // Android/iOS Client IDs are needed only for standalone builds
+    webClientId:     process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+    iosClientId:     process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+  });
 
   useEffect(() => {
     if (response?.type !== 'success') return;
 
     const accessToken = response.authentication?.accessToken;
-    if (!accessToken) return;
+
+    if (!accessToken) {
+      Alert.alert('Google Login Error', 'Token dari Google tidak ditemukan. Coba lagi.');
+      return;
+    }
 
     const signIn = async () => {
       setLoading(true);
       try {
+        // Sends { token: accessToken } to POST /api/auth/social/google
         await socialLogin('google', accessToken);
         router.replace('/');
       } catch (err: any) {
-        const msg = err?.response?.data?.message || 'Login dengan Google gagal. Silakan coba lagi.';
-        Alert.alert('Gagal Google Login', msg);
+        const message =
+          err?.response?.data?.message ??
+          err?.response?.data?.errors?.token?.[0] ??
+          'Login dengan Google gagal. Coba lagi.';
+        Alert.alert('Gagal', message);
       } finally {
         setLoading(false);
       }
@@ -65,30 +60,23 @@ export function GoogleSignInButton() {
   }, [response]);
 
   const handlePress = async () => {
-    const hasClientId =
-      process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
-      process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
-
-    if (!hasClientId) {
+    if (!process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID) {
       Alert.alert(
-        'Konfigurasi Google Login',
-        'Fitur Google Login membutuhkan Client ID dari Google Cloud Console di file .env (EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID).\n\nSilakan gunakan registrasi/login biasa dengan Email & Password.'
+        'Konfigurasi Belum Lengkap',
+        'Tambahkan EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ke file .env.local lalu restart Expo dengan: npx expo start -c',
       );
       return;
     }
 
-    if (promptAsync) {
-      try {
-        const res = await promptAsync();
-        if (res?.type === 'dismiss' || res?.type === 'cancel') {
-          // User cancelled sign in
-        }
-      } catch (e: any) {
-        Alert.alert('Error', e?.message || 'Gagal membuka Google Sign-In.');
-      }
-    } else {
-      Alert.alert('Google Login', 'Google Sign-In belum siap atau tidak tersedia di platform ini.');
+    if (!request) {
+      Alert.alert('Belum siap', 'Google Sign-In sedang memuat. Tunggu sebentar.');
+      return;
+    }
+
+    try {
+      await promptAsync();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Gagal membuka Google Sign-In.');
     }
   };
 
@@ -99,15 +87,14 @@ export function GoogleSignInButton() {
       disabled={loading}
       activeOpacity={0.85}
     >
-      {loading
-        ? <ActivityIndicator color={Colors.dark} size="small" />
-        : (
-          <>
-            <Text style={styles.icon}>G</Text>
-            <Text style={styles.text}>Lanjutkan dengan Google</Text>
-          </>
-        )
-      }
+      {loading ? (
+        <ActivityIndicator color={Colors.dark} size="small" />
+      ) : (
+        <>
+          <Text style={styles.icon}>G</Text>
+          <Text style={styles.text}>Lanjutkan dengan Google</Text>
+        </>
+      )}
     </TouchableOpacity>
   );
 }
